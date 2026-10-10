@@ -28,7 +28,9 @@ MelView, restart Home Assistant, then add the MelView integration.
 
 **Local control** also sends each command straight to the unit's Wi-Fi
 adapter on your network, so it responds without waiting on the cloud. Status
-always comes from the cloud.
+always comes from the cloud. Newer adapter firmware turns that interface off
+and answers 403 to everything; the integration then logs one warning and
+controls that unit through the cloud only.
 
 ## License
 

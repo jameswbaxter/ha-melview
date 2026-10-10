@@ -188,16 +188,34 @@ class MelViewDevice:
         if not local_command:
             _LOGGER.warning("%s: MelView gave no local command for %s", self._friendlyname, command)
             return
+        _LOGGER.debug("%s: local command for %s is %s", self._friendlyname, self._localip, local_command)
         try:
             async with self._session.post(
                 f"http://{self._localip}/smart",
                 data=LOCAL_DATA.format(local_command),
                 timeout=TIMEOUT,
             ) as local:
-                if local.status != 200:
+                body = await local.text()
+                if local.status == 403:
+                    # Newer adapter firmware turns the local interface off and
+                    # refuses every command, so stop trying; the cloud has
+                    # already sent this one
                     _LOGGER.warning(
-                        "%s: local adapter answered %s", self._friendlyname, local.status
+                        "%s: the adapter at %s refuses local commands (403), so "
+                        "this unit is controlled through MelView only",
+                        self._friendlyname,
+                        self._localip,
                     )
+                    self._localip = None
+                elif local.status != 200:
+                    _LOGGER.warning(
+                        "%s: local adapter answered %s: %s",
+                        self._friendlyname,
+                        local.status,
+                        body[:200],
+                    )
+                else:
+                    _LOGGER.debug("%s: local adapter answered %s", self._friendlyname, body[:200])
         except ClientError as err:
             # MelView has the command already, so the unit still gets it
             _LOGGER.warning("%s: local adapter unreachable: %s", self._friendlyname, err)
