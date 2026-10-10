@@ -1,12 +1,12 @@
 {
   "domain": "melview",
   "name": "MelView",
-  "version": "1.1.1",
+  "codeowners": ["@jameswbaxter"],
   "config_flow": true,
-  "documentation": "https://github.com/haggis663/ha-melview",
-  "issue_tracker": "https://github.com/haggis663/ha-melview/issues",
-  "dependencies": [],
-  "codeowners": ["@haggis663"],
-  "requirements": ["requests"],
-  "iot_class": "cloud_polling"
+  "documentation": "https://github.com/jameswbaxter/ha-melview",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/jameswbaxter/ha-melview/issues",
+  "requirements": [],
+  "version": "2.0.0"
 }

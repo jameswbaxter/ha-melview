@@ -3,21 +3,31 @@
     "step": {
       "user": {
         "title": "Connect to MelView",
-        "description": "Connect using your MelView account.",
+        "description": "Log in with your MelView (Mitsubishi Electric Wi-Fi Control) account.",
         "data": {
-          "email": "[%key:common::config_flow::data::email%]",
-          "password": "[%key:common::config_flow::data::password%]",
-		  "local": "[%key:common::config_flow::data::local%]"
+          "email": "Email",
+          "password": "Password",
+          "local": "Local control"
+        },
+        "data_description": {
+          "local": "Also send each command straight to the unit's Wi-Fi adapter on your network, so it responds without waiting on the cloud."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in to MelView again",
+        "description": "MelView no longer accepts the password for {email}.",
+        "data": {
+          "password": "Password"
         }
       }
     },
     "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "cannot_connect": "Could not reach MelView.",
+      "invalid_auth": "MelView rejected the email or password."
     },
     "abort": {
-      "already_configured": "MelView integration already configured for this email. "
+      "already_configured": "This MelView account is already set up.",
+      "reauth_successful": "Logged in again."
     }
   }
 }

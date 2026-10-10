@@ -1,24 +1,34 @@
-# HomeAssistant - MelView
+# Home Assistant - MelView
 
-HomeAssistant component for mitsubishi air conditioner (MelView) for Australia and pehaps New Zealand
-It handles climate control as well as zone control
+A Home Assistant integration for Mitsubishi Electric air conditioners on
+MelView ("Wi-Fi Control", the Australian and New Zealand service). Each unit
+becomes a climate entity (power, mode, target temperature, fan speed, room
+temperature, and outside temperature where the unit reports it), and each zone
+of a ducted unit a switch.
 
+This is a fork of [haggis663/ha-melview](https://github.com/haggis663/ha-melview)
+(itself a fork of [zacharyrs/ha-melview](https://github.com/zacharyrs/ha-melview)),
+reworked for current Home Assistant:
 
-## Alternatives with more functionality
-
-Unfortunately, I've had very little time to focus on this, so it's stagnated with a few things to do.
-Currently it lacks `async` support, plus zones and dynanamic fan speeds are only in the `dev` branch.
-
-There is a fork - https://github.com/haggis663/ha-melview - which has this plus releases to HACS, so that's probably the best replacement for anyone who needs more functionality.
-
-I do hope to work on this again in the future, but I have no idea when...
+- fully async on one aiohttp session, so it never blocks the event loop
+  (haggis663#11)
+- one coordinator polls every unit every 30s; entities only read its cache
+- local control works again: the command MelView encodes for the unit's own
+  adapter is sent to it (haggis663#6 - the coroutine was never awaited)
+- setting a temperature sets the target, not the room temperature
+- modes, fan speeds and temperature limits come from what each unit reports
+- reauthentication when the MelView password changes
+- no YAML setup; add it in the UI
 
 ## Installing
 
-- Clone the required parts of the repo to <config_dir>/custom_components/melview/ or use HACS (add custom repository)
+HACS > Integrations > custom repositories: add
+`https://github.com/jameswbaxter/ha-melview` as an Integration, download
+MelView, restart Home Assistant, then add the MelView integration.
 
-Restart home assistant, refresh browser cache and add integration melview
-
+**Local control** also sends each command straight to the unit's Wi-Fi
+adapter on your network, so it responds without waiting on the cloud. Status
+always comes from the cloud.
 
 ## License
 

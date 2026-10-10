@@ -1,135 +1,62 @@
-import logging
-from .melview import MelViewAuthentication, MelView
+"""Zone switches for ducted MelView units."""
+
+from __future__ import annotations
+
+from typing import Any
+
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-_LOGGER = logging.getLogger(__name__)
-DOMAIN = 'melview'
-REQUIREMENTS = ['requests']
-DEPENDENCIES = []
-
-class MelViewZoneSwitch(SwitchEntity):
-    """ Melview zone switch handler for HomeAssistants
-    """
-    def __init__(self, zone, parentClimate):
-        self._id = zone.id
-        self._name = zone.name
-        self._status = zone.status
-        self._climate = parentClimate
-
-    def update(self):
-        self._climate.force_update()
-        zone = self._climate.get_zone(self._id)
-        self._name = zone.name
-        self._status = zone.status
-
-    async def async_update(self):
-        await self._climate.async_force_update()
-        zone = self._climate.get_zone(self._id)
-        self._name = zone.name
-        self._status = zone.status
-
-    @property
-    def name(self):
-        """ Diplay name for HASS
-        """
-        return f"{self._name} AC Zone"
-
-    @property
-    def unique_id(self):
-        """ Get unique_id for HASS
-        """
-        return f"{self._climate.get_id()}-{self._id}"
-
-    @property
-    def should_poll(self):
-        """ Ensure HASS polls the zone
-        """
-        return True
-
-    @property
-    def is_on(self):
-        """ Check zone is on
-        """
-        return self._status == 1
-
-    def turn_on(self):
-        """ Turn on the zone
-        """
-        _LOGGER.debug('power on zone')
-        if self._climate.enable_zone(self._id):
-            self._status = 1
-
-    def turn_off(self):
-        """ Turn off the zone
-        """
-        _LOGGER.debug('power off zone')
-        if self._climate.disable_zone(self._id):
-            self._status = 0
-            
-    async def async_turn_on(self):
-        """ Turn on the zone
-        """
-        _LOGGER.debug('power on zone')
-        if await self._climate.async_enable_zone(self._id):
-            self._status = 1
-
-    async def async_turn_off(self):
-        """ Turn off the zone
-        """
-        _LOGGER.debug('power off zone')
-        if await self._climate.async_disable_zone(self._id):
-            self._status = 0
+from .coordinator import MelViewConfigEntry, MelViewCoordinator
+from .entity import MelViewEntity
+from .melview import MelViewDevice, MelViewError
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
-    """ Set up the HASS component
-    """
-    _LOGGER.debug('adding component')
-
-    email = config[DOMAIN][CONF_EMAIL]
-    password = config[DOMAIN][CONF_PASSWORD]
-    local = config[DOMAIN][CONF_LOCAL]
-    if email is None:
-        _LOGGER.error('no email provided')
-        return False
-
-    if password is None:
-        _LOGGER.error('no password provided')
-        return False
-
-    if local is None:
-        _LOGGER.warning('local unspecified, defaulting to false')
-        local = False
-
-    mv_auth = MelViewAuthentication(email, password)
-    if not mv_auth.login():
-        _LOGGER.error('login combination')
-        return False
-
-    melview = MelView(mv_auth, localcontrol=local)
-
-    device_list = []
-
-    devices = melview.get_devices_list()
-    for device in devices:
-        for zone in device.get_zones():
-            _LOGGER.debug('new device: %s', device.get_friendly_name())
-            device_list.append(MelViewZoneSwitch(zone, device))
-
-    add_devices(device_list)
-
-    _LOGGER.debug('component successfully added')
-    return True
 async def async_setup_entry(
-    hass, entry, async_add_entities
+    hass: HomeAssistant,
+    entry: MelViewConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up MelView device climate based on config_entry."""
-    mel_devices = hass.data[DOMAIN][entry.entry_id]
-    
+    """Add a switch per zone, for the units that have zones."""
+    coordinator = entry.runtime_data
     async_add_entities(
-        [   
-            MelViewZoneSwitch(zone,mel_device)
-            for mel_device in mel_devices
-            for zone in mel_device.get_zones()
-        ],False
+        MelViewZoneSwitch(coordinator, device, zone.id, zone.name)
+        for device in coordinator.devices
+        for zone in device.get_zones()
     )
+
+
+class MelViewZoneSwitch(MelViewEntity, SwitchEntity):
+    """One zone of a ducted unit."""
+
+    def __init__(
+        self, coordinator: MelViewCoordinator, device: MelViewDevice, zoneid: int, name: str
+    ) -> None:
+        super().__init__(coordinator, device)
+        self._zoneid = zoneid
+        self._attr_name = f"{name} zone"
+        self._attr_unique_id = f"{device.get_id()}-{zoneid}"
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._device.get_zone(self._zoneid) is not None
+
+    @property
+    def is_on(self) -> bool | None:
+        zone = self._device.get_zone(self._zoneid)
+        return zone.status == 1 if zone else None
+
+    async def _set(self, on: bool) -> None:
+        try:
+            await self._device.async_set_zone(self._zoneid, on)
+        except MelViewError as err:
+            raise HomeAssistantError(str(err)) from err
+        self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._set(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._set(False)

@@ -1,446 +1,113 @@
-#!/usr/local/bin/python3
+"""Climate entity for a MelView unit."""
 
-'''
-    Author: zacharyrs
+from __future__ import annotations
 
-    How to install:
-        Refer to README.md
+from typing import Any
 
-    License:
-                DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-                        Version 2, December 2004
-
-        Everyone is permitted to copy and distribute verbatim or modified
-        copies of this license document, and changing it is allowed as long
-        as the name is changed.
-
-                  DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-          TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
-
-         0. You just DO WHAT THE FUCK YOU WANT TO.
-'''
-
-import logging
-
-from homeassistant.components.climate.const import (
+from homeassistant.components.climate import (
+    ClimateEntity,
+    ClimateEntityFeature,
     HVACMode,
-    ClimateEntityFeature
 )
-
-
-from homeassistant.components.climate import ClimateEntity
 from homeassistant.const import (
-    UnitOfTemperature,
     ATTR_TEMPERATURE,
     PRECISION_HALVES,
     PRECISION_WHOLE,
-    STATE_OFF
+    UnitOfTemperature,
 )
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .melview import MelViewAuthentication, MelView, MODE
+from .coordinator import MelViewConfigEntry, MelViewCoordinator
+from .entity import MelViewEntity
+from .melview import MelViewDevice, MelViewError
 
-_LOGGER = logging.getLogger(__name__)
-
-DOMAIN = 'melview'
-REQUIREMENTS = ['requests']
-DEPENDENCIES = []
-
-HVAC_MODES = [HVACMode.AUTO, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.HEAT, HVACMode.OFF]
-
-
-# ---------------------------------------------------------------
-
-class MelViewClimate(ClimateEntity):
-    """ Melview handler for HomeAssistants
-    """
-    def __init__(self, device):
-        self._enable_turn_on_off_backwards_compatibility = False
-        self._device = device
-
-        self._name = 'MelView {}'.format(device.get_friendly_name())
-        self._unique_id = device.get_id()
-
-        self._operations_list = [x for x in MODE] + [HVACMode.OFF]
-        self._speeds_list = [x for x in self._device.fan_keyed]
-
-        self._precision = PRECISION_WHOLE
-        self._target_step = 1.0
-        if self._device.get_precision_halves():
-            self._precision = PRECISION_HALVES
-            self._target_step = 0.5
-
-        self._current_temp = self._device.get_room_temperature()
-        self._target_temp = self._device.get_temperature()
-
-        self._mode = self._device.get_mode()
-        self._speed = self._device.get_speed()
-
-        self._state = STATE_OFF
-        if self._device.is_power_on():
-            self._state = self._mode
-
-
-    def update(self):
-        """ Update device properties
-        """
-        _LOGGER.debug('updating state')
-        self._device.force_update()
-
-        self._precision = PRECISION_WHOLE
-        self._target_step = 1.0
-        if self._device.get_precision_halves():
-            self._precision = PRECISION_HALVES
-            self._target_step = 0.5
-
-        self._current_temp = self._device.get_room_temperature()
-        self._target_temp = self._device.get_temperature()
-
-        self._mode = self._device.get_mode()
-        self._speed = self._device.get_speed()
-
-        self._state = self._mode
-        
-        if not self._device.is_power_on():
-            self._mode = 'off'
-            self._state = STATE_OFF
-
-    async def async_update(self):
-        """ Update device properties
-        """
-        _LOGGER.debug('updating state')
-        await self._device.async_force_update()
-
-        self._precision = PRECISION_WHOLE
-        self._target_step = 1.0
-        if self._device.get_precision_halves():
-            self._precision = PRECISION_HALVES
-            self._target_step = 0.5
-
-        self._current_temp = await self._device.async_get_room_temperature()
-        self._target_temp = self._device.get_temperature()
-
-        self._mode = await self._device.async_get_mode()
-        self._speed = await self._device.async_get_speed()
-
-        self._state = self._mode
-        
-        if not await self._device.async_is_power_on():
-            self._mode = 'off'
-            self._state = STATE_OFF
-
-    @property
-    def name(self):
-        """ Diplay name for HASS
-        """
-        return self._name
-
-
-    @property
-    def unique_id(self):
-        """ Get unique_id for HASS
-        """
-        return self._unique_id
-
-
-    @property
-    def supported_features(self):
-        """ Let HASS know feature support
-            TODO: Handle looking at the device features?
-        """
-        return (ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF)
-
-
-    @property
-    def should_poll(self):
-        """ Ensure HASS polls the unit
-        """
-        return True
-
-
-    @property
-    def state(self):
-        """ Return the current state.
-        """
-        return self._state
-
-
-    @property
-    def is_on(self):
-        """ Check unit is on
-        """
-        return self._state != STATE_OFF
-
-
-    @property
-    def precision(self):
-        """ Return the precision of the system.
-        """
-        return self._precision
-
-
-    @property
-    def temperature_unit(self):
-        """ Define unit for temperature
-        """
-        return UnitOfTemperature.CELSIUS
-
-
-    @property
-    def current_temperature(self):
-        """ Get the current room temperature
-        """
-        return self._current_temp
-
-
-    @property
-    def target_temperature(self):
-        """ Get the target temperature
-        """
-        return self._target_temp
-
-
-    # TODO
-    # @property
-    # def min_temp(self):
-    #     """ Return the minimum temperature
-    #     """
-    #     return convert_temperature(DEFAULT_MIN_TEMP, TEMP_CELSIUS,
-    #                                self.temperature_unit)
-
-
-    # @property
-    # def max_temp(self):
-    #     """ Return the maximum temperature
-    #     """
-    #     return convert_temperature(DEFAULT_MAX_TEMP, TEMP_CELSIUS,
-    #                                self.temperature_unit)
-
-
-    @property
-    def target_temperature_step(self):
-        """ Return the supported step of target temperature
-        """
-        return self._target_step
-
-
-    @property
-    def hvac_mode(self):
-        """ Get the current operating mode
-        """
-        return self._mode
-
-
-    @property
-    def hvac_modes(self):
-        """ Get possible operating modes
-        """
-        return self._operations_list
-
-
-    @property
-    def fan_mode(self):
-        """ Check the unit fan speed
-        """
-        return self._speed
-
-
-    @property
-    def fan_modes(self):
-        """ Get the possible fan speeds
-        """
-        return self._speeds_list
-
-    async def async_set_temperature(self, **kwargs) -> None:
-        """ Set the target temperature
-        """
-        temp = kwargs.get(ATTR_TEMPERATURE)
-        if temp is not None:
-            _LOGGER.debug('setting temp %d', temp)
-            if await self._device.async_set_temperature(temp):
-                self._current_temp = temp
-
-
-    def set_temperature(self, **kwargs):
-        """ Set the target temperature
-        """
-        temp = kwargs.get(ATTR_TEMPERATURE)
-        if temp is not None:
-            _LOGGER.debug('setting temp %d', temp)
-            if self._device.set_temperature(temp):
-                self._current_temp = temp
-
-    async def async_set_fan_mode(self, fan_mode) -> None:
-        """ Set the fan speed
-        """
-        speed = fan_mode
-        _LOGGER.debug('set fan mode: %s', speed)
-        if await self._device.async_set_speed(speed):
-            self._speed = speed
-            self._mode = self._device.get_mode()
-            self._state = self._mode
-
-
-    def set_fan_mode(self, speed):
-        """ Set the fan speed
-        """
-        _LOGGER.debug('set fan mode: %s', speed)
-        if self._device.set_speed(speed):
-            self._speed = speed
-            self._mode = self._device.get_mode()
-            self._state = self._mode
-
-    async def async_set_hvac_mode(self, hvac_mode) -> None:
-        _LOGGER.debug('set mode: %s', hvac_mode)
-        if hvac_mode == 'off':
-            await self.async_turn_off()
-        elif await self._device.async_set_mode(hvac_mode):
-            self._mode = hvac_mode
-            self._state = hvac_mode
-        
-    def set_hvac_mode(self, mode):
-        """ Set the operation mode
-        """
-        _LOGGER.debug('set mode: %s', mode)
-        if mode == 'off':
-            self.turn_off()
-        elif self._device.set_mode(mode):
-            self._mode = mode
-            self._state = mode
-
-    async def async_turn_on(self) ->None:
-        """ Turn on the unit
-        """
-        _LOGGER.debug('power on')
-        if await self._device.async_power_on():
-            self._mode = self._device.get_mode()
-            self._state = self._mode
-
-    def turn_on(self):
-        """ Turn on the unit
-        """
-        _LOGGER.debug('power on')
-        if self._device.power_on():
-            self._mode = self._device.get_mode()
-            self._state = self._mode
-
-    async def async_turn_off(self) -> None:
-        """ Turn off the unit
-        """
-        _LOGGER.debug('power off')
-        if await self._device.async_power_off():
-            self._mode = 'off'
-            self._state = STATE_OFF
-
-    def turn_off(self):
-        """ Turn off the unit
-        """
-        _LOGGER.debug('power off')
-        if self._device.power_off():
-            self._mode = 'off'
-            self._state = STATE_OFF
-
-# ---------------------------------------------------------------
-
-def setup_platform(hass, config, add_devices, discovery_info=None):
-    """ Set up the HASS component
-    """
-    _LOGGER.debug('adding component')
-
-    # email = config.get('email')
-    # password = config.get('password')
-    # local = config.get('local')
-    email = config[DOMAIN][CONF_EMAIL]
-    password = config[DOMAIN][CONF_PASSWORD]
-    local = config[DOMAIN][CONF_LOCAL]
-
-    if email is None:
-        _LOGGER.error('no email provided')
-        return False
-
-    if password is None:
-        _LOGGER.error('no password provided')
-        return False
-
-    if local is None:
-        _LOGGER.warning('local unspecified, defaulting to false')
-        local = False
-
-    mv_auth = MelViewAuthentication(email, password)
-    if not mv_auth.login():
-        _LOGGER.error('login combination')
-        return False
-
-    melview = MelView(mv_auth, localcontrol=local)
-
-    device_list = []
-
-    devices = melview.get_devices_list()
-    for device in devices:
-        _LOGGER.debug('new device: %s', device.get_friendly_name())
-        device_list.append(device)
-
-    add_devices(device_list)
-
-    _LOGGER.debug('component successfully added')
-    return True
-
-async def _async_setup_platform(hass, config, add_devices, discovery_info=None):
-    """ Set up the HASS component
-    """
-    _LOGGER.debug('adding component')
-
-    # email = config.get('email')
-    # password = config.get('password')
-    # local = config.get('local')
-    email = config[DOMAIN][CONF_EMAIL]
-    password = config[DOMAIN][CONF_PASSWORD]
-    local = config[DOMAIN][CONF_LOCAL]
-
-    if email is None:
-        _LOGGER.error('no email provided')
-        return False
-
-    if password is None:
-        _LOGGER.error('no password provided')
-        return False
-
-    if local is None:
-        _LOGGER.warning('local unspecified, defaulting to false')
-        local = False
-
-    mv_auth = MelViewAuthentication(email, password)
-    result= await mv_auth.asynclogin()
-    if not result:
-        _LOGGER.error('login combination')
-        return False
-
-    melview = MelView(mv_auth, localcontrol=local)
-
-    device_list = []
-
-    devices = await melview.async_get_devices_list()
-    for device in devices:
-        await device.async_refresh()
-        _LOGGER.debug('new device: %s', device.get_friendly_name())
-        device_list.append(MelViewClimate(device))
-
-    add_devices(device_list)
-
-    _LOGGER.debug('component successfully added')
-    return True
 
 async def async_setup_entry(
-    hass, entry, async_add_entities
+    hass: HomeAssistant,
+    entry: MelViewConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up MelView device climate based on config_entry."""
-    mel_devices = hass.data[DOMAIN][entry.entry_id]
-    
-    async_add_entities(
-        [   
-            MelViewClimate(mel_device)
-            for mel_device in mel_devices
-        ],False
+    """Add a climate entity per unit."""
+    coordinator = entry.runtime_data
+    async_add_entities(MelViewClimate(coordinator, device) for device in coordinator.devices)
+
+
+class MelViewClimate(MelViewEntity, ClimateEntity):
+    """A MelView unit as a climate entity."""
+
+    _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.TURN_ON
+        | ClimateEntityFeature.TURN_OFF
     )
 
- 
-# ---------------------------------------------------------------
+    def __init__(self, coordinator: MelViewCoordinator, device: MelViewDevice) -> None:
+        super().__init__(coordinator, device)
+        self._attr_unique_id = device.get_id()
+        self._attr_hvac_modes = [HVACMode.OFF, *device.get_supported_modes()]
+        self._attr_fan_modes = list(device.fan.values())
+        halves = device.get_precision_halves()
+        self._attr_precision = PRECISION_HALVES if halves else PRECISION_WHOLE
+        self._attr_target_temperature_step = 0.5 if halves else 1.0
+
+    @property
+    def hvac_mode(self) -> HVACMode:
+        if not self._device.is_power_on():
+            return HVACMode.OFF
+        return self._device.get_mode()
+
+    @property
+    def current_temperature(self) -> float | None:
+        return self._device.get_room_temperature()
+
+    @property
+    def target_temperature(self) -> float | None:
+        return self._device.get_temperature()
+
+    @property
+    def min_temp(self) -> float:
+        return self._device.get_temperature_range(self._device.get_mode())[0]
+
+    @property
+    def max_temp(self) -> float:
+        return self._device.get_temperature_range(self._device.get_mode())[1]
+
+    @property
+    def fan_mode(self) -> str | None:
+        return self._device.get_speed()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        outside = self._device.get_outside_temperature()
+        return {"outside_temperature": outside} if outside is not None else None
+
+    async def _command(self, action) -> None:
+        try:
+            await action
+        except MelViewError as err:
+            raise HomeAssistantError(str(err)) from err
+        self.async_write_ha_state()
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            await self._command(self._device.async_set_temperature(float(temperature)))
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        await self._command(self._device.async_set_speed(fan_mode))
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        if hvac_mode == HVACMode.OFF:
+            await self._command(self._device.async_power_off())
+        else:
+            await self._command(self._device.async_set_mode(hvac_mode))
+
+    async def async_turn_on(self) -> None:
+        await self._command(self._device.async_power_on())
+
+    async def async_turn_off(self) -> None:
+        await self._command(self._device.async_power_off())
